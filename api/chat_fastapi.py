@@ -4,26 +4,26 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 import asyncio
+import json
 
 app = FastAPI()
 
 # 配置 CORS 中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 允许所有来源
+    allow_origins=["http://localhost:3000"],  # 允许所有来源
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-openai_api_key = "EMPTY"
-openai_api_base = "http://localhost:8000/v1"
+openai_api_key = "key"
 
-client = OpenAI(api_key=openai_api_key, base_url=openai_api_base)
+client = OpenAI(api_key=openai_api_key, base_url="https://api.deepseek.com")
 
 @app.get("/chat")
 async def generate(input_text: str):
-    model = client.models.list().data[0].id
+    model = "deepseek-chat"
     stream = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": input_text}],
@@ -32,11 +32,14 @@ async def generate(input_text: str):
 
     async def generate_text():
         for chunk in stream:
-            yield chunk.choices[0].delta.content or ""
+            content = chunk.choices[0].delta.content
+            if content:
+                yield f"data: {json.dumps({'content': content})}\n\n"
             await asyncio.sleep(0.1)  # 模拟流式输出延迟
+        yield "data: [DONE]\n\n"
 
-    return StreamingResponse(generate_text(), media_type="text/plain")
+    return StreamingResponse(generate_text(), media_type="text/event-stream")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=5000)
